@@ -51,7 +51,7 @@ tr:hover { background: #f8f9fa; }
 <div class="header">
   <h1>订单管理系统</h1>
   <div class="tabs">
-    <button class="active" onclick="switchTab('products')">货物管理</button>
+    <button class="active" onclick="switchTab('products')">货物清单</button>
     <button onclick="switchTab('customers')">客户管理</button>
     <button onclick="switchTab('orders')">订单管理</button>
   </div>
@@ -59,28 +59,55 @@ tr:hover { background: #f8f9fa; }
 
 <div class="container">
 
-<!-- ===== 货物管理 ===== -->
+<!-- ===== 货物清单 ===== -->
 <div id="panel-products" class="panel active">
   <div class="card">
-    <h2>添加货物</h2>
-    <div id="msg-product" class="msg"></div>
+    <h2>清单管理</h2>
+    <div id="msg-pricelist" class="msg"></div>
     <div class="form-row">
       <div class="form-group">
-        <label>名称</label>
-        <input id="p-name" placeholder="货物名称">
+        <label>清单名称</label>
+        <input id="pl-name" placeholder="如：标准价格">
       </div>
-      <div class="form-group">
-        <label>单位</label>
-        <input id="p-unit" placeholder="吨/箱/个">
-      </div>
-      <div class="form-group">
-        <label>单价</label>
-        <input id="p-price" type="number" step="0.01" placeholder="0.00">
-      </div>
-      <button class="btn btn-primary" onclick="addProduct()">添加</button>
+      <button class="btn btn-primary" onclick="addPriceList()">添加清单</button>
     </div>
+    <table>
+      <thead><tr><th>ID</th><th>名称</th><th>操作</th></tr></thead>
+      <tbody id="pricelists-table"></tbody>
+    </table>
   </div>
+
   <div class="card">
+    <h2>清单明细</h2>
+    <div id="msg-product" class="msg"></div>
+    <div class="form-row" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label>选择清单</label>
+        <select id="p-list" onchange="loadListProducts()">
+          <option value="">-- 选择清单 --</option>
+        </select>
+      </div>
+    </div>
+    <div id="product-form" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>名称</label>
+          <input id="p-name" placeholder="货物名称">
+        </div>
+        <div class="form-group">
+          <label>单位</label>
+          <select id="p-unit">
+            <option value="套">套</option>
+            <option value="个">个</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>单价</label>
+          <input id="p-price" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <button class="btn btn-primary" onclick="addProduct()">添加</button>
+      </div>
+    </div>
     <table>
       <thead><tr><th>ID</th><th>名称</th><th>单位</th><th>单价</th><th>操作</th></tr></thead>
       <tbody id="products-table"></tbody>
@@ -98,12 +125,16 @@ tr:hover { background: #f8f9fa; }
         <label>名称</label>
         <input id="c-name" placeholder="客户名称">
       </div>
+      <div class="form-group">
+        <label>货物清单</label>
+        <select id="c-list"><option value="">-- 选择清单 --</option></select>
+      </div>
       <button class="btn btn-primary" onclick="addCustomer()">添加</button>
     </div>
   </div>
   <div class="card">
     <table>
-      <thead><tr><th>ID</th><th>名称</th><th>操作</th></tr></thead>
+      <thead><tr><th>ID</th><th>名称</th><th>货物清单</th><th>操作</th></tr></thead>
       <tbody id="customers-table"></tbody>
     </table>
   </div>
@@ -121,7 +152,7 @@ tr:hover { background: #f8f9fa; }
       </div>
       <div class="form-group">
         <label>客户</label>
-        <select id="o-customer"><option value="">-- 选择客户 --</option></select>
+        <select id="o-customer" onchange="onOrderCustomerSelect()"><option value="">-- 选择客户 --</option></select>
       </div>
       <div class="form-group">
         <label>货物</label>
@@ -189,10 +220,11 @@ tr:hover { background: #f8f9fa; }
 
 <script>
 // --- State ---
+let priceLists = [];
 let products = [];
 let customers = [];
 let orders = [];
-let editingRow = null;
+let displayedProducts = [];
 
 // --- Tab switching ---
 function switchTab(name) {
@@ -224,16 +256,105 @@ async function api(url, method, body) {
   return { ok: res.ok, data: await res.json() };
 }
 
-// ==================== Products ====================
+// ==================== Price Lists & Products ====================
 async function loadProducts() {
-  const { data } = await api('/api/products', 'GET');
-  products = data;
+  const { data } = await api('/api/pricelists', 'GET');
+  priceLists = data;
+  renderPriceLists();
+  fillPriceListDropdown();
+  await loadListProducts();
+}
+
+function renderPriceLists() {
+  const tb = document.getElementById('pricelists-table');
+  tb.innerHTML = priceLists.map(pl => `
+    <tr id="plrow-${pl.id}">
+      <td>${pl.id}</td>
+      <td>${esc(pl.name)}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="editPriceListRow(${pl.id})">编辑</button>
+        <button class="btn btn-sm btn-success" onclick="copyPriceList(${pl.id})">复制</button>
+        <button class="btn btn-sm btn-danger" onclick="deletePriceList(${pl.id})">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function fillPriceListDropdown() {
+  const sel = document.getElementById('p-list');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- 选择清单 --</option>' +
+    priceLists.map(pl => `<option value="${pl.id}">${esc(pl.name)}</option>`).join('');
+  if (prev) sel.value = prev;
+}
+
+async function loadListProducts() {
+  const listId = document.getElementById('p-list').value;
+  const form = document.getElementById('product-form');
+  if (listId) {
+    form.style.display = 'block';
+    const { data } = await api('/api/products?list_id=' + listId, 'GET');
+    displayedProducts = data;
+  } else {
+    form.style.display = 'none';
+    displayedProducts = [];
+  }
   renderProducts();
+}
+
+async function addPriceList() {
+  const name = document.getElementById('pl-name').value.trim();
+  if (!name) return showMsg('msg-pricelist', '名称不能为空', false);
+  const { ok, data } = await api('/api/pricelists', 'POST', { name });
+  if (ok) {
+    showMsg('msg-pricelist', '添加成功', true);
+    document.getElementById('pl-name').value = '';
+    loadProducts();
+  } else {
+    showMsg('msg-pricelist', data.error || '添加失败', false);
+  }
+}
+
+function editPriceListRow(id) {
+  const pl = priceLists.find(x => x.id == id);
+  if (!pl) return;
+  const row = document.getElementById('plrow-' + id);
+  row.innerHTML = `
+    <td>${pl.id}</td>
+    <td><input class="edit-input" id="ple-name-${id}" value="${esc(pl.name)}"></td>
+    <td class="actions">
+      <button class="btn btn-sm btn-success" onclick="savePriceList(${id})">保存</button>
+      <button class="btn btn-sm btn-secondary" onclick="renderPriceLists()">取消</button>
+    </td>
+  `;
+}
+
+async function savePriceList(id) {
+  const name = document.getElementById('ple-name-' + id).value.trim();
+  const { ok, data } = await api('/api/pricelists/' + id, 'PUT', { name });
+  if (ok) { showMsg('msg-pricelist', '修改成功', true); loadProducts(); }
+  else showMsg('msg-pricelist', data.error || '修改失败', false);
+}
+
+async function deletePriceList(id) {
+  if (!confirm('确定删除此清单？清单内的货物也会被删除。')) return;
+  const { ok } = await api('/api/pricelists/' + id, 'DELETE');
+  if (ok) loadProducts();
+}
+
+async function copyPriceList(id) {
+  const { ok, data } = await api('/api/pricelists/' + id + '/copy', 'POST');
+  if (ok) {
+    showMsg('msg-pricelist', '复制成功: ' + data.name, true);
+    loadProducts();
+  } else {
+    showMsg('msg-pricelist', data.error || '复制失败', false);
+  }
 }
 
 function renderProducts() {
   const tb = document.getElementById('products-table');
-  tb.innerHTML = products.map(p => `
+  tb.innerHTML = displayedProducts.map(p => `
     <tr id="prow-${p.id}">
       <td>${p.id}</td>
       <td>${esc(p.name)}</td>
@@ -248,30 +369,33 @@ function renderProducts() {
 }
 
 async function addProduct() {
+  const list_id = document.getElementById('p-list').value;
   const name = document.getElementById('p-name').value.trim();
-  const unit = document.getElementById('p-unit').value.trim();
+  const unit = document.getElementById('p-unit').value;
   const price = document.getElementById('p-price').value;
   if (!name) return showMsg('msg-product', '名称不能为空', false);
-  const { ok, data } = await api('/api/products', 'POST', { name, unit, price });
+  const { ok, data } = await api('/api/products', 'POST', { list_id, name, unit, price });
   if (ok) {
     showMsg('msg-product', '添加成功', true);
     document.getElementById('p-name').value = '';
-    document.getElementById('p-unit').value = '';
     document.getElementById('p-price').value = '';
-    loadProducts();
+    loadListProducts();
   } else {
     showMsg('msg-product', data.error || '添加失败', false);
   }
 }
 
 function editProductRow(id) {
-  const p = products.find(x => x.id == id);
+  const p = displayedProducts.find(x => x.id == id);
   if (!p) return;
+  const unitOpts = ['套', '个'].map(u =>
+    `<option value="${u}" ${u === p.unit ? 'selected' : ''}>${u}</option>`
+  ).join('');
   const row = document.getElementById('prow-' + id);
   row.innerHTML = `
     <td>${p.id}</td>
     <td><input class="edit-input" id="pe-name-${id}" value="${esc(p.name)}"></td>
-    <td><input class="edit-input" id="pe-unit-${id}" value="${esc(p.unit)}"></td>
+    <td><select class="edit-input" id="pe-unit-${id}">${unitOpts}</select></td>
     <td><input class="edit-input" id="pe-price-${id}" type="number" step="0.01" value="${p.price}"></td>
     <td class="actions">
       <button class="btn btn-sm btn-success" onclick="saveProduct(${id})">保存</button>
@@ -282,24 +406,39 @@ function editProductRow(id) {
 
 async function saveProduct(id) {
   const name = document.getElementById('pe-name-' + id).value.trim();
-  const unit = document.getElementById('pe-unit-' + id).value.trim();
+  const unit = document.getElementById('pe-unit-' + id).value;
   const price = document.getElementById('pe-price-' + id).value;
   const { ok, data } = await api('/api/products/' + id, 'PUT', { name, unit, price });
-  if (ok) { showMsg('msg-product', '修改成功', true); loadProducts(); }
+  if (ok) { showMsg('msg-product', '修改成功', true); loadListProducts(); }
   else showMsg('msg-product', data.error || '修改失败', false);
 }
 
 async function deleteProduct(id) {
   if (!confirm('确定删除此货物？')) return;
   const { ok } = await api('/api/products/' + id, 'DELETE');
-  if (ok) loadProducts();
+  if (ok) loadListProducts();
 }
 
 // ==================== Customers ====================
 async function loadCustomers() {
-  const { data } = await api('/api/customers', 'GET');
-  customers = data;
+  const [cRes, plRes] = await Promise.all([
+    api('/api/customers', 'GET'),
+    api('/api/pricelists', 'GET'),
+  ]);
+  customers = cRes.data;
+  priceLists = plRes.data;
+  // Fill price list dropdown in add form
+  const sel = document.getElementById('c-list');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- 选择清单 --</option>' +
+    priceLists.map(pl => `<option value="${pl.id}">${esc(pl.name)}</option>`).join('');
+  if (prev) sel.value = prev;
   renderCustomers();
+}
+
+function getListName(listId) {
+  const pl = priceLists.find(x => String(x.id) === String(listId || ''));
+  return pl ? pl.name : '未设置';
 }
 
 function renderCustomers() {
@@ -308,6 +447,7 @@ function renderCustomers() {
     <tr id="crow-${c.id}">
       <td>${c.id}</td>
       <td>${esc(c.name)}</td>
+      <td>${esc(getListName(c.list_id))}</td>
       <td class="actions">
         <button class="btn btn-sm btn-primary" onclick="editCustomerRow(${c.id})">编辑</button>
         <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">删除</button>
@@ -318,8 +458,9 @@ function renderCustomers() {
 
 async function addCustomer() {
   const name = document.getElementById('c-name').value.trim();
+  const list_id = document.getElementById('c-list').value;
   if (!name) return showMsg('msg-customer', '名称不能为空', false);
-  const { ok, data } = await api('/api/customers', 'POST', { name });
+  const { ok, data } = await api('/api/customers', 'POST', { name, list_id });
   if (ok) {
     showMsg('msg-customer', '添加成功', true);
     document.getElementById('c-name').value = '';
@@ -332,10 +473,14 @@ async function addCustomer() {
 function editCustomerRow(id) {
   const c = customers.find(x => x.id == id);
   if (!c) return;
+  const plOpts = priceLists.map(pl =>
+    `<option value="${pl.id}" ${String(pl.id) === String(c.list_id || '') ? 'selected' : ''}>${esc(pl.name)}</option>`
+  ).join('');
   const row = document.getElementById('crow-' + id);
   row.innerHTML = `
     <td>${c.id}</td>
     <td><input class="edit-input" id="ce-name-${id}" value="${esc(c.name)}"></td>
+    <td><select class="edit-input" id="ce-list-${id}"><option value="">未设置</option>${plOpts}</select></td>
     <td class="actions">
       <button class="btn btn-sm btn-success" onclick="saveCustomer(${id})">保存</button>
       <button class="btn btn-sm btn-secondary" onclick="renderCustomers()">取消</button>
@@ -345,7 +490,8 @@ function editCustomerRow(id) {
 
 async function saveCustomer(id) {
   const name = document.getElementById('ce-name-' + id).value.trim();
-  const { ok, data } = await api('/api/customers/' + id, 'PUT', { name });
+  const list_id = document.getElementById('ce-list-' + id).value;
+  const { ok, data } = await api('/api/customers/' + id, 'PUT', { name, list_id });
   if (ok) { showMsg('msg-customer', '修改成功', true); loadCustomers(); }
   else showMsg('msg-customer', data.error || '修改失败', false);
 }
@@ -359,21 +505,26 @@ async function deleteCustomer(id) {
 // ==================== Orders ====================
 async function loadOrders() {
   // Load dropdown data
-  const [pRes, cRes] = await Promise.all([
+  const [pRes, cRes, plRes] = await Promise.all([
     api('/api/products', 'GET'),
     api('/api/customers', 'GET'),
+    api('/api/pricelists', 'GET'),
   ]);
   products = pRes.data;
   customers = cRes.data;
+  priceLists = plRes.data;
 
   // Preserve current selections before rebuilding dropdowns
   const prevCustomer = document.getElementById('o-customer').value;
   const prevProduct = document.getElementById('o-product').value;
   fillDropdowns();
-  if (prevCustomer) document.getElementById('o-customer').value = prevCustomer;
-  if (prevProduct) {
-    document.getElementById('o-product').value = prevProduct;
-    onProductSelect();
+  if (prevCustomer) {
+    document.getElementById('o-customer').value = prevCustomer;
+    fillOrderProducts(prevCustomer);
+    if (prevProduct) {
+      document.getElementById('o-product').value = prevProduct;
+      onProductSelect();
+    }
   }
 
   // Set default date
@@ -397,16 +548,40 @@ async function loadOrders() {
 
 function fillDropdowns() {
   const cs = document.getElementById('o-customer');
-  const ps = document.getElementById('o-product');
   cs.innerHTML = '<option value="">-- 选择客户 --</option>' +
     customers.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  // Product dropdown starts empty, filled when customer is selected
+  document.getElementById('o-product').innerHTML = '<option value="">-- 先选择客户 --</option>';
+}
+
+function fillOrderProducts(customerName) {
+  const ps = document.getElementById('o-product');
+  const c = customers.find(x => x.name === customerName);
+  const listId = c ? String(c.list_id || '') : '';
+  if (!listId) {
+    ps.innerHTML = '<option value="">-- 该客户未设置货物清单 --</option>';
+    return;
+  }
+  const cp = products.filter(p => String(p.list_id || '') === listId);
   ps.innerHTML = '<option value="">-- 选择货物 --</option>' +
-    products.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    cp.map(p => `<option value="${p.id}">${esc(p.name)}(${esc(p.unit)}) - ¥${p.price}</option>`).join('');
+}
+
+function onOrderCustomerSelect() {
+  const customer = document.getElementById('o-customer').value;
+  if (customer) {
+    fillOrderProducts(customer);
+  } else {
+    document.getElementById('o-product').innerHTML = '<option value="">-- 先选择客户 --</option>';
+  }
+  document.getElementById('o-unit').value = '';
+  document.getElementById('o-price').value = '';
+  document.getElementById('o-total').value = '';
 }
 
 function onProductSelect() {
   const sel = document.getElementById('o-product').value;
-  const p = products.find(x => x.name === sel);
+  const p = products.find(x => String(x.id) === sel);
   if (p) {
     document.getElementById('o-unit').value = p.unit;
     document.getElementById('o-price').value = p.price;
@@ -449,13 +624,15 @@ function renderOrders(list) {
 async function addOrder() {
   const date = document.getElementById('o-date').value;
   const customer = document.getElementById('o-customer').value;
-  const product = document.getElementById('o-product').value;
+  const productId = document.getElementById('o-product').value;
   const unit = document.getElementById('o-unit').value;
   const price = document.getElementById('o-price').value;
   const quantity = document.getElementById('o-quantity').value;
-  if (!date || !customer || !product || !quantity) {
+  if (!date || !customer || !productId || !quantity) {
     return showMsg('msg-order', '请填写完整信息', false);
   }
+  const pObj = products.find(x => String(x.id) === productId);
+  const product = pObj ? pObj.name : '';
   const { ok, data } = await api('/api/orders', 'POST', { date, customer, product, unit, price, quantity });
   if (ok) {
     showMsg('msg-order', '添加成功', true);
@@ -475,14 +652,17 @@ function editOrderRow(id) {
   const customerOpts = customers.map(c =>
     `<option value="${esc(c.name)}" ${c.name === o.customer ? 'selected' : ''}>${esc(c.name)}</option>`
   ).join('');
-  const productOpts = products.map(p =>
-    `<option value="${esc(p.name)}" ${p.name === o.product ? 'selected' : ''}>${esc(p.name)}</option>`
+  const cObj = customers.find(x => x.name === o.customer);
+  const listId = cObj ? String(cObj.list_id || '') : '';
+  const cp = products.filter(p => String(p.list_id || '') === listId);
+  const productOpts = cp.map(p =>
+    `<option value="${p.id}" ${p.name === o.product && p.unit === o.unit ? 'selected' : ''}>${esc(p.name)}(${esc(p.unit)}) - ¥${p.price}</option>`
   ).join('');
   const row = document.getElementById('orow-' + id);
   row.innerHTML = `
     <td>${o.id}</td>
     <td><input class="edit-input" id="oe-date-${id}" type="date" value="${o.date}"></td>
-    <td><select class="edit-input" id="oe-customer-${id}">${customerOpts}</select></td>
+    <td><select class="edit-input" id="oe-customer-${id}" onchange="onEditCustomerSelect(${id})">${customerOpts}</select></td>
     <td><select class="edit-input" id="oe-product-${id}" onchange="onEditProductSelect(${id})">${productOpts}</select></td>
     <td><input class="edit-input" id="oe-unit-${id}" value="${esc(o.unit)}" readonly></td>
     <td><input class="edit-input" id="oe-price-${id}" type="number" step="0.01" value="${o.price}" oninput="calcEditTotal(${id})"></td>
@@ -495,9 +675,27 @@ function editOrderRow(id) {
   `;
 }
 
+function onEditCustomerSelect(id) {
+  const customer = document.getElementById('oe-customer-' + id).value;
+  const cObj = customers.find(x => x.name === customer);
+  const listId = cObj ? String(cObj.list_id || '') : '';
+  const cp = products.filter(p => String(p.list_id || '') === listId);
+  const ps = document.getElementById('oe-product-' + id);
+  ps.innerHTML = cp.map(p =>
+    `<option value="${p.id}">${esc(p.name)}(${esc(p.unit)}) - ¥${p.price}</option>`
+  ).join('');
+  if (cp.length > 0) {
+    onEditProductSelect(id);
+  } else {
+    document.getElementById('oe-unit-' + id).value = '';
+    document.getElementById('oe-price-' + id).value = '';
+    calcEditTotal(id);
+  }
+}
+
 function onEditProductSelect(id) {
   const sel = document.getElementById('oe-product-' + id).value;
-  const p = products.find(x => x.name === sel);
+  const p = products.find(x => String(x.id) === sel);
   if (p) {
     document.getElementById('oe-unit-' + id).value = p.unit;
     document.getElementById('oe-price-' + id).value = p.price;
@@ -514,7 +712,9 @@ function calcEditTotal(id) {
 async function saveOrder(id) {
   const date = document.getElementById('oe-date-' + id).value;
   const customer = document.getElementById('oe-customer-' + id).value;
-  const product = document.getElementById('oe-product-' + id).value;
+  const productId = document.getElementById('oe-product-' + id).value;
+  const pObj = products.find(x => String(x.id) === productId);
+  const product = pObj ? pObj.name : '';
   const unit = document.getElementById('oe-unit-' + id).value;
   const price = document.getElementById('oe-price-' + id).value;
   const quantity = document.getElementById('oe-qty-' + id).value;
