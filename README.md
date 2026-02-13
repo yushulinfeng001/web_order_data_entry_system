@@ -1,2 +1,0 @@
-# web_order_data_entry_system
-# web_order_data_entry_system
