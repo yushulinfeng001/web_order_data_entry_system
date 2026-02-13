@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订单管理系统</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
+.header { background: #2c3e50; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 24px; }
+.header h1 { font-size: 18px; font-weight: 600; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { background: transparent; color: #adb5bd; border: none; padding: 8px 16px; cursor: pointer; font-size: 14px; border-radius: 4px 4px 0 0; }
+.tabs button.active { background: #f5f5f5; color: #333; }
+.tabs button:hover { color: #fff; }
+.tabs button.active:hover { color: #333; }
+.container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+.panel { display: none; }
+.panel.active { display: block; }
+.card { background: #fff; border-radius: 6px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.card h2 { font-size: 15px; margin-bottom: 12px; color: #555; }
+.form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; color: #888; }
+.form-group input, .form-group select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; min-width: 120px; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #3498db; }
+button.btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #3498db; color: #fff; }
+.btn-primary:hover { background: #2980b9; }
+.btn-danger { background: #e74c3c; color: #fff; }
+.btn-danger:hover { background: #c0392b; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-success:hover { background: #219a52; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.btn-secondary:hover { background: #7f8c8d; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+th { background: #fafafa; color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+tr:hover { background: #f8f9fa; }
+.actions { display: flex; gap: 4px; }
+.summary { margin-top: 12px; text-align: right; font-size: 15px; font-weight: 600; color: #2c3e50; }
+.msg { padding: 8px 12px; border-radius: 4px; margin-bottom: 8px; font-size: 13px; display: none; }
+.msg-ok { background: #d4edda; color: #155724; }
+.msg-err { background: #f8d7da; color: #721c24; }
+.edit-input { padding: 4px 6px; border: 1px solid #3498db; border-radius: 3px; font-size: 13px; width: 100%; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>订单管理系统</h1>
+  <div class="tabs">
+    <button class="active" onclick="switchTab('products')">货物管理</button>
+    <button onclick="switchTab('customers')">客户管理</button>
+    <button onclick="switchTab('orders')">订单管理</button>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ===== 货物管理 ===== -->
+<div id="panel-products" class="panel active">
+  <div class="card">
+    <h2>添加货物</h2>
+    <div id="msg-product" class="msg"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>名称</label>
+        <input id="p-name" placeholder="货物名称">
+      </div>
+      <div class="form-group">
+        <label>单位</label>
+        <input id="p-unit" placeholder="吨/箱/个">
+      </div>
+      <div class="form-group">
+        <label>单价</label>
+        <input id="p-price" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <button class="btn btn-primary" onclick="addProduct()">添加</button>
+    </div>
+  </div>
+  <div class="card">
+    <table>
+      <thead><tr><th>ID</th><th>名称</th><th>单位</th><th>单价</th><th>操作</th></tr></thead>
+      <tbody id="products-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 客户管理 ===== -->
+<div id="panel-customers" class="panel">
+  <div class="card">
+    <h2>添加客户</h2>
+    <div id="msg-customer" class="msg"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>名称</label>
+        <input id="c-name" placeholder="客户名称">
+      </div>
+      <button class="btn btn-primary" onclick="addCustomer()">添加</button>
+    </div>
+  </div>
+  <div class="card">
+    <table>
+      <thead><tr><th>ID</th><th>名称</th><th>操作</th></tr></thead>
+      <tbody id="customers-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 订单管理 ===== -->
+<div id="panel-orders" class="panel">
+  <div class="card">
+    <h2>录入订单</h2>
+    <div id="msg-order" class="msg"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>日期</label>
+        <input id="o-date" type="date">
+      </div>
+      <div class="form-group">
+        <label>客户</label>
+        <select id="o-customer"><option value="">-- 选择客户 --</option></select>
+      </div>
+      <div class="form-group">
+        <label>货物</label>
+        <select id="o-product" onchange="onProductSelect()"><option value="">-- 选择货物 --</option></select>
+      </div>
+      <div class="form-group">
+        <label>单位</label>
+        <input id="o-unit" readonly>
+      </div>
+      <div class="form-group">
+        <label>单价</label>
+        <input id="o-price" type="number" step="0.01" oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>数量</label>
+        <input id="o-quantity" type="number" step="0.01" oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>总价</label>
+        <input id="o-total" readonly>
+      </div>
+      <button class="btn btn-primary" onclick="addOrder()">添加</button>
+      <button class="btn btn-success" onclick="document.getElementById('import-file').click()">导入数据</button>
+      <input type="file" id="import-file" accept=".csv,.xlsx" style="display:none" onchange="importOrders(this)">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>查询订单</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>客户（支持正则）</label>
+        <input id="q-customer" placeholder="如：张.*">
+      </div>
+      <div class="form-group">
+        <label>货物名称</label>
+        <input id="q-product" placeholder="货物名称">
+      </div>
+      <div class="form-group">
+        <label>开始日期</label>
+        <input id="q-from" type="date">
+      </div>
+      <div class="form-group">
+        <label>结束日期</label>
+        <input id="q-to" type="date">
+      </div>
+      <button class="btn btn-primary" onclick="searchOrders()">查询</button>
+      <button class="btn btn-secondary" onclick="clearSearch()">清空</button>
+      <button class="btn btn-success" onclick="exportCSV()">导出CSV</button>
+      <button class="btn btn-success" onclick="exportExcel()">导出Excel</button>
+      <button class="btn btn-success" onclick="exportAll()">导出全部数据</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="orders-summary" class="summary" style="margin-top:0; margin-bottom:12px;"></div>
+    <table>
+      <thead><tr><th>ID</th><th>日期</th><th>客户</th><th>货物</th><th>单位</th><th>单价</th><th>数量</th><th>总价</th><th>操作</th></tr></thead>
+      <tbody id="orders-table"></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+
+<script>
+// --- State ---
+let products = [];
+let customers = [];
+let orders = [];
+let editingRow = null;
+
+// --- Tab switching ---
+function switchTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const tabs = document.querySelectorAll('.tabs button');
+  const idx = {products: 0, customers: 1, orders: 2}[name];
+  tabs[idx].classList.add('active');
+  if (name === 'products') loadProducts();
+  else if (name === 'customers') loadCustomers();
+  else loadOrders();
+}
+
+// --- Messages ---
+function showMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + (ok ? 'msg-ok' : 'msg-err');
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+
+// --- API helpers ---
+async function api(url, method, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  return { ok: res.ok, data: await res.json() };
+}
+
+// ==================== Products ====================
+async function loadProducts() {
+  const { data } = await api('/api/products', 'GET');
+  products = data;
+  renderProducts();
+}
+
+function renderProducts() {
+  const tb = document.getElementById('products-table');
+  tb.innerHTML = products.map(p => `
+    <tr id="prow-${p.id}">
+      <td>${p.id}</td>
+      <td>${esc(p.name)}</td>
+      <td>${esc(p.unit)}</td>
+      <td>${p.price}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="editProductRow(${p.id})">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function addProduct() {
+  const name = document.getElementById('p-name').value.trim();
+  const unit = document.getElementById('p-unit').value.trim();
+  const price = document.getElementById('p-price').value;
+  if (!name) return showMsg('msg-product', '名称不能为空', false);
+  const { ok, data } = await api('/api/products', 'POST', { name, unit, price });
+  if (ok) {
+    showMsg('msg-product', '添加成功', true);
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-unit').value = '';
+    document.getElementById('p-price').value = '';
+    loadProducts();
+  } else {
+    showMsg('msg-product', data.error || '添加失败', false);
+  }
+}
+
+function editProductRow(id) {
+  const p = products.find(x => x.id == id);
+  if (!p) return;
+  const row = document.getElementById('prow-' + id);
+  row.innerHTML = `
+    <td>${p.id}</td>
+    <td><input class="edit-input" id="pe-name-${id}" value="${esc(p.name)}"></td>
+    <td><input class="edit-input" id="pe-unit-${id}" value="${esc(p.unit)}"></td>
+    <td><input class="edit-input" id="pe-price-${id}" type="number" step="0.01" value="${p.price}"></td>
+    <td class="actions">
+      <button class="btn btn-sm btn-success" onclick="saveProduct(${id})">保存</button>
+      <button class="btn btn-sm btn-secondary" onclick="renderProducts()">取消</button>
+    </td>
+  `;
+}
+
+async function saveProduct(id) {
+  const name = document.getElementById('pe-name-' + id).value.trim();
+  const unit = document.getElementById('pe-unit-' + id).value.trim();
+  const price = document.getElementById('pe-price-' + id).value;
+  const { ok, data } = await api('/api/products/' + id, 'PUT', { name, unit, price });
+  if (ok) { showMsg('msg-product', '修改成功', true); loadProducts(); }
+  else showMsg('msg-product', data.error || '修改失败', false);
+}
+
+async function deleteProduct(id) {
+  if (!confirm('确定删除此货物？')) return;
+  const { ok } = await api('/api/products/' + id, 'DELETE');
+  if (ok) loadProducts();
+}
+
+// ==================== Customers ====================
+async function loadCustomers() {
+  const { data } = await api('/api/customers', 'GET');
+  customers = data;
+  renderCustomers();
+}
+
+function renderCustomers() {
+  const tb = document.getElementById('customers-table');
+  tb.innerHTML = customers.map(c => `
+    <tr id="crow-${c.id}">
+      <td>${c.id}</td>
+      <td>${esc(c.name)}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="editCustomerRow(${c.id})">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function addCustomer() {
+  const name = document.getElementById('c-name').value.trim();
+  if (!name) return showMsg('msg-customer', '名称不能为空', false);
+  const { ok, data } = await api('/api/customers', 'POST', { name });
+  if (ok) {
+    showMsg('msg-customer', '添加成功', true);
+    document.getElementById('c-name').value = '';
+    loadCustomers();
+  } else {
+    showMsg('msg-customer', data.error || '添加失败', false);
+  }
+}
+
+function editCustomerRow(id) {
+  const c = customers.find(x => x.id == id);
+  if (!c) return;
+  const row = document.getElementById('crow-' + id);
+  row.innerHTML = `
+    <td>${c.id}</td>
+    <td><input class="edit-input" id="ce-name-${id}" value="${esc(c.name)}"></td>
+    <td class="actions">
+      <button class="btn btn-sm btn-success" onclick="saveCustomer(${id})">保存</button>
+      <button class="btn btn-sm btn-secondary" onclick="renderCustomers()">取消</button>
+    </td>
+  `;
+}
+
+async function saveCustomer(id) {
+  const name = document.getElementById('ce-name-' + id).value.trim();
+  const { ok, data } = await api('/api/customers/' + id, 'PUT', { name });
+  if (ok) { showMsg('msg-customer', '修改成功', true); loadCustomers(); }
+  else showMsg('msg-customer', data.error || '修改失败', false);
+}
+
+async function deleteCustomer(id) {
+  if (!confirm('确定删除此客户？')) return;
+  const { ok } = await api('/api/customers/' + id, 'DELETE');
+  if (ok) loadCustomers();
+}
+
+// ==================== Orders ====================
+async function loadOrders() {
+  // Load dropdown data
+  const [pRes, cRes] = await Promise.all([
+    api('/api/products', 'GET'),
+    api('/api/customers', 'GET'),
+  ]);
+  products = pRes.data;
+  customers = cRes.data;
+
+  // Preserve current selections before rebuilding dropdowns
+  const prevCustomer = document.getElementById('o-customer').value;
+  const prevProduct = document.getElementById('o-product').value;
+  fillDropdowns();
+  if (prevCustomer) document.getElementById('o-customer').value = prevCustomer;
+  if (prevProduct) {
+    document.getElementById('o-product').value = prevProduct;
+    onProductSelect();
+  }
+
+  // Set default date
+  if (!document.getElementById('o-date').value) {
+    document.getElementById('o-date').value = new Date().toISOString().slice(0, 10);
+  }
+
+  // If search filters are set, apply them; otherwise load all
+  const hasFilter = document.getElementById('q-customer').value.trim() ||
+                    document.getElementById('q-product').value.trim() ||
+                    document.getElementById('q-from').value ||
+                    document.getElementById('q-to').value;
+  if (hasFilter) {
+    searchOrders();
+  } else {
+    const { data } = await api('/api/orders', 'GET');
+    orders = data;
+    renderOrders(orders);
+  }
+}
+
+function fillDropdowns() {
+  const cs = document.getElementById('o-customer');
+  const ps = document.getElementById('o-product');
+  cs.innerHTML = '<option value="">-- 选择客户 --</option>' +
+    customers.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  ps.innerHTML = '<option value="">-- 选择货物 --</option>' +
+    products.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+}
+
+function onProductSelect() {
+  const sel = document.getElementById('o-product').value;
+  const p = products.find(x => x.name === sel);
+  if (p) {
+    document.getElementById('o-unit').value = p.unit;
+    document.getElementById('o-price').value = p.price;
+    calcTotal();
+  } else {
+    document.getElementById('o-unit').value = '';
+    document.getElementById('o-price').value = '';
+    document.getElementById('o-total').value = '';
+  }
+}
+
+function calcTotal() {
+  const price = parseFloat(document.getElementById('o-price').value) || 0;
+  const qty = parseFloat(document.getElementById('o-quantity').value) || 0;
+  document.getElementById('o-total').value = (price * qty).toFixed(2);
+}
+
+function renderOrders(list) {
+  const tb = document.getElementById('orders-table');
+  tb.innerHTML = list.map(o => `
+    <tr id="orow-${o.id}">
+      <td>${o.id}</td>
+      <td>${esc(o.date)}</td>
+      <td>${esc(o.customer)}</td>
+      <td>${esc(o.product)}</td>
+      <td>${esc(o.unit)}</td>
+      <td>${o.price}</td>
+      <td>${o.quantity}</td>
+      <td>${o.total}</td>
+      <td class="actions">
+        <button class="btn btn-sm btn-primary" onclick="editOrderRow(${o.id})">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteOrder(${o.id})">删除</button>
+      </td>
+    </tr>
+  `).join('');
+  const total = list.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  document.getElementById('orders-summary').textContent = '合计: ¥' + total.toFixed(2);
+}
+
+async function addOrder() {
+  const date = document.getElementById('o-date').value;
+  const customer = document.getElementById('o-customer').value;
+  const product = document.getElementById('o-product').value;
+  const unit = document.getElementById('o-unit').value;
+  const price = document.getElementById('o-price').value;
+  const quantity = document.getElementById('o-quantity').value;
+  if (!date || !customer || !product || !quantity) {
+    return showMsg('msg-order', '请填写完整信息', false);
+  }
+  const { ok, data } = await api('/api/orders', 'POST', { date, customer, product, unit, price, quantity });
+  if (ok) {
+    showMsg('msg-order', '添加成功', true);
+    document.getElementById('o-quantity').value = '';
+    document.getElementById('o-total').value = '';
+    // Auto-filter by current customer after adding
+    document.getElementById('q-customer').value = customer;
+    loadOrders();
+  } else {
+    showMsg('msg-order', data.error || '添加失败', false);
+  }
+}
+
+function editOrderRow(id) {
+  const o = orders.find(x => x.id == id);
+  if (!o) return;
+  const customerOpts = customers.map(c =>
+    `<option value="${esc(c.name)}" ${c.name === o.customer ? 'selected' : ''}>${esc(c.name)}</option>`
+  ).join('');
+  const productOpts = products.map(p =>
+    `<option value="${esc(p.name)}" ${p.name === o.product ? 'selected' : ''}>${esc(p.name)}</option>`
+  ).join('');
+  const row = document.getElementById('orow-' + id);
+  row.innerHTML = `
+    <td>${o.id}</td>
+    <td><input class="edit-input" id="oe-date-${id}" type="date" value="${o.date}"></td>
+    <td><select class="edit-input" id="oe-customer-${id}">${customerOpts}</select></td>
+    <td><select class="edit-input" id="oe-product-${id}" onchange="onEditProductSelect(${id})">${productOpts}</select></td>
+    <td><input class="edit-input" id="oe-unit-${id}" value="${esc(o.unit)}" readonly></td>
+    <td><input class="edit-input" id="oe-price-${id}" type="number" step="0.01" value="${o.price}" oninput="calcEditTotal(${id})"></td>
+    <td><input class="edit-input" id="oe-qty-${id}" type="number" step="0.01" value="${o.quantity}" oninput="calcEditTotal(${id})"></td>
+    <td id="oe-total-${id}">${o.total}</td>
+    <td class="actions">
+      <button class="btn btn-sm btn-success" onclick="saveOrder(${id})">保存</button>
+      <button class="btn btn-sm btn-secondary" onclick="renderOrders(orders)">取消</button>
+    </td>
+  `;
+}
+
+function onEditProductSelect(id) {
+  const sel = document.getElementById('oe-product-' + id).value;
+  const p = products.find(x => x.name === sel);
+  if (p) {
+    document.getElementById('oe-unit-' + id).value = p.unit;
+    document.getElementById('oe-price-' + id).value = p.price;
+    calcEditTotal(id);
+  }
+}
+
+function calcEditTotal(id) {
+  const price = parseFloat(document.getElementById('oe-price-' + id).value) || 0;
+  const qty = parseFloat(document.getElementById('oe-qty-' + id).value) || 0;
+  document.getElementById('oe-total-' + id).textContent = (price * qty).toFixed(2);
+}
+
+async function saveOrder(id) {
+  const date = document.getElementById('oe-date-' + id).value;
+  const customer = document.getElementById('oe-customer-' + id).value;
+  const product = document.getElementById('oe-product-' + id).value;
+  const unit = document.getElementById('oe-unit-' + id).value;
+  const price = document.getElementById('oe-price-' + id).value;
+  const quantity = document.getElementById('oe-qty-' + id).value;
+  const { ok, data } = await api('/api/orders/' + id, 'PUT', { date, customer, product, unit, price, quantity });
+  if (ok) { showMsg('msg-order', '修改成功', true); loadOrders(); }
+  else showMsg('msg-order', data.error || '修改失败', false);
+}
+
+async function deleteOrder(id) {
+  if (!confirm('确定删除此订单？')) return;
+  const { ok } = await api('/api/orders/' + id, 'DELETE');
+  if (ok) loadOrders();
+}
+
+async function searchOrders() {
+  const customer = document.getElementById('q-customer').value.trim();
+  const product = document.getElementById('q-product').value.trim();
+  const date_from = document.getElementById('q-from').value;
+  const date_to = document.getElementById('q-to').value;
+  const params = new URLSearchParams();
+  if (customer) params.set('customer', customer);
+  if (product) params.set('product', product);
+  if (date_from) params.set('date_from', date_from);
+  if (date_to) params.set('date_to', date_to);
+  const { data } = await api('/api/orders/search?' + params.toString(), 'GET');
+  orders = data.orders;
+  renderOrders(data.orders);
+  document.getElementById('orders-summary').textContent = '查询合计: ¥' + data.total.toFixed(2);
+}
+
+function clearSearch() {
+  document.getElementById('q-customer').value = '';
+  document.getElementById('q-product').value = '';
+  document.getElementById('q-from').value = '';
+  document.getElementById('q-to').value = '';
+  loadOrders();
+}
+
+// ==================== Export / Import ====================
+function getSearchParams() {
+  const params = new URLSearchParams();
+  const customer = document.getElementById('q-customer').value.trim();
+  const product = document.getElementById('q-product').value.trim();
+  const date_from = document.getElementById('q-from').value;
+  const date_to = document.getElementById('q-to').value;
+  if (customer) params.set('customer', customer);
+  if (product) params.set('product', product);
+  if (date_from) params.set('date_from', date_from);
+  if (date_to) params.set('date_to', date_to);
+  return params.toString();
+}
+
+function exportCSV() {
+  const qs = getSearchParams();
+  window.location.href = '/api/orders/export/csv' + (qs ? '?' + qs : '');
+}
+
+function exportExcel() {
+  const qs = getSearchParams();
+  window.location.href = '/api/orders/export/excel' + (qs ? '?' + qs : '');
+}
+
+function exportAll() {
+  window.location.href = '/api/data/export';
+}
+
+async function importOrders(input) {
+  if (!input.files.length) return;
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
+  try {
+    const res = await fetch('/api/orders/import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      showMsg('msg-order', '导入成功，共 ' + data.count + ' 条', true);
+      loadOrders();
+    } else {
+      showMsg('msg-order', data.error || '导入失败', false);
+    }
+  } catch (e) {
+    showMsg('msg-order', '导入失败: ' + e.message, false);
+  }
+  input.value = '';
+}
+
+// --- Utility ---
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// --- Init ---
+loadProducts();
+</script>
+</body>
+</html>

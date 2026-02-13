@@ -1,0 +1,9 @@
+[project]
+name = "web-order-data-entry-system"
+version = "0.1.0"
+description = "Web-based order data entry and management system"
+requires-python = ">=3.11"
+dependencies = [
+    "flask",
+    "openpyxl",
+]
